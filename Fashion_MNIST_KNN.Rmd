@@ -1,0 +1,92 @@
+---
+title: "KNN"
+author: "Stacy Lee"
+output: rmarkdown::github_document
+---
+
+```{r}
+train_set = as.matrix(read.csv("fashion-mnist_train.csv")[,-1])
+
+test_set = as.matrix(read.csv("fashion-mnist_test.csv")[,-1])
+
+all_train_labels = as.matrix(read.csv("fashion-mnist_train.csv")[,1])
+all_test_labels = as.matrix(read.csv("fashion-mnist_test.csv")[,1])
+```
+
+```{r,18}
+#count function from plyr package will be used
+library(plyr)
+```
+
+
+I dealt with ties by finding the values with the maximum frequency and taking a random sample from the numbers in the tie.
+```{r,19}
+pred_knn <- function(train_data, test_tuple, train_labels, k){
+  test_sample = matrix(rep(test_tuple,times=nrow(train_data)),ncol=ncol(train_data), byrow=TRUE) #test_sample is matrix repeating the input test tuple every row and has the same dim as train_data
+  distances = sqrt(apply((train_data - test_sample)^2, 1, sum))
+  pairs = cbind(train_labels, distances)
+  ordered_pairs = pairs[order(pairs[,2]),]
+  top_k = ordered_pairs[1:k,]
+  freq_count = count(top_k)
+  prediction = sample(freq_count[which(freq_count$freq == max(freq_count$freq)),1],1)
+  return(prediction)
+}
+```
+
+
+I wrote a function to fit the knn model to the training data and predict the labels.
+```{r,20}
+classify_knn <- function(train_data, test_data, train_labels, k){
+  labels = vector()
+  for (i in 1:nrow(test_data)){
+    labels=append(labels, pred_knn(train_data, test_data[i,], train_labels, k))
+  }
+  return(labels)
+}
+```
+
+Then, I wrote a function to calculate the accuracy score of my model and tuning parameter, k.
+```{r,21}
+accuracy_knn <- function(train_data, test_data, train_labels, test_labels, k){
+  predictions = classify_knn(train_data, test_data, train_labels, k)
+  score = 100 * sum(predictions==test_labels)/nrow(test_data) 
+  #nrow(test_data) is equal to number of test_labels
+  return(score)
+}
+```
+
+
+I conducted a principal component analysis to gain insight on the importance of the variables. Usually, the covariance matrix is used when the variable scales are similar and the correlation matrix is used when variables are on different scales. Since the variables are on the same scale, I calculated the covariance matrix using prcomp with the default parameters.
+
+```{r,22}
+pca_train = prcomp(train_set) # Conducts PCA for Variance
+summary(pca_train)$importance[3,187]
+```
+From the values of the Cumulative Proportion of Variance in the summary of the pca data, I can conclude that retaining 187 components would give us enough information, as the results show that the first 187 principal components account for over 95% of the variation in the original data.
+
+```{r,23}
+plot(summary(pca_train)$importance[3,1:200], main= "Cumulative Proportion of Variance vs. Number of Principal Components", xlab = "Principal Component",ylab = "Cumulative Proportion of Variance Explained", ylim=c(0,1), type = "l")
+```
+The plot above shows how more than 187 components covers more than 95% of the variance.
+
+```{r,24}
+set.seed(1)
+idx_187 = sample(1:ncol(train_set), 187, replace= FALSE)
+train_187 = train_set[,idx_187]
+test_187 = test_set[,idx_187]
+```
+
+
+```{r,25}
+#Calculates the accuracy of the model with parameter k=4
+accuracy_4_187 = accuracy_knn(train_187, test_187, all_train_labels, all_test_labels, 4)
+accuracy_4_187
+```
+
+
+My best accuracy score is roughly 80.88% with the tuning parameter, k, equal to 4. So, with 4 nearest neighbors, my testing error, which is 100 minus the accuracy, is 19.12%. Increasing the k parameter slightly decreases the accuracy but has generally similar accuracy score.
+
+The degrees of freedom is roughly the total number of samples, n, divided by k, which in this case is 60,000 (training samples) divided by the 4 nearest neighbor parameter. Therefore, the degrees of freedom in this case is 15,000. If the neighborhoods don't overlap, there would be 15,000 neighborhoods with one selected majority label.
+
+Conclustion:
+Dropping variables is a possible way of speeding up computation time. In my computation, I dropped 597 variables out of 785 total variables. Based on the principal component analysis, 187 of the variables explained 95% of the variance in the dataset. 
